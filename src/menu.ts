@@ -445,7 +445,11 @@ export function buildModelFilterMenu(opts: MenuOptions) {
       const lines = renderEdit(width);
       if (submenuSelectList) {
         lines.push("");
-        lines.push(theme.bold(theme.fg("accent", state.submenu === "provider" ? "Select provider:" : state.submenu === "ids" ? "Toggle IDs (Enter to toggle, Esc to done):" : "Select reasoning:" )));
+        let title = "Select:";
+        if (state.submenu === "provider") title = "Select provider:";
+        else if (state.submenu === "ids") title = "Toggle IDs (Enter to toggle, Esc to done):";
+        else if (state.submenu === "reasoning") title = "Select reasoning:";
+        lines.push(theme.bold(theme.fg("accent", title)));
         lines.push(...submenuSelectList.render(width));
       }
       return lines;
@@ -494,6 +498,7 @@ export function buildModelFilterMenu(opts: MenuOptions) {
         if (matchesKey(data, Key.escape)) {
           patternsEditorActive = false;
           textEditor.setText("");
+          state.submenu = null;
           refresh();
           return;
         }
@@ -553,7 +558,7 @@ export function buildModelFilterMenu(opts: MenuOptions) {
         } else {
           idsSelectedIds.add(item.value);
         }
-        // Rebuild the list (SelectList has no setItems)
+        // Rebuild the list via fresh constructor
         buildIdsSelectList();
         refresh();
       };
@@ -660,6 +665,7 @@ export function buildModelFilterMenu(opts: MenuOptions) {
     function handleSubmenuInput(data: string) {
       if (!submenuSelectList) {
         state.submenu = null;
+        refresh();
         return;
       }
       if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
@@ -699,6 +705,7 @@ export function buildModelFilterMenu(opts: MenuOptions) {
       }
       patternsEditorActive = false;
       textEditor.setText("");
+      state.submenu = null;
       refresh();
     }
 
