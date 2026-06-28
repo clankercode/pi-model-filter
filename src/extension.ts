@@ -1,12 +1,17 @@
 import { join } from "node:path";
-import { createConfigStore, startConfigWatcher } from "./config.js";
+import {
+  createConfigStore,
+  startConfigWatcher,
+  loadConfig,
+  type ConfigStore,
+  type Logger,
+} from "./config.js";
 import { patchModelRegistryPrototype } from "./patch.js";
+import { buildModelFilterMenu } from "./menu.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type Logger = { warn: (message: string) => void };
 
 type SessionContext = {
   ui?: { notify?: (payload: { level: "warning"; message: string }) => void };
@@ -43,7 +48,7 @@ let getAgentDir: (() => string) | undefined;
 let ModelRegistry: any;
 
 try {
-  const piMod = await import("@earendil-works/pi-coding-agent") as any;
+  const piMod = (await import("@earendil-works/pi-coding-agent")) as any;
   getAgentDir = piMod.getAgentDir;
   ModelRegistry = piMod.ModelRegistry;
 } catch {
@@ -68,6 +73,23 @@ export default function piModelFilter(pi: any) {
     store,
     factoryLog,
   );
+
+  // Register the /model-filter slash command
+  pi.registerCommand("model-filter", {
+    description: "Open the model filter menu",
+    handler: async (_args: string, ctx: any) => {
+      await ctx.ui.custom(
+        buildModelFilterMenu({
+          store,
+          configPath,
+          reloadConfig: () => {
+            const newConfig = loadConfig(configPath, factoryLog);
+            store.replace(newConfig);
+          },
+        }),
+      );
+    },
+  });
 
   pi.on("session_start", (_event: unknown, ctx: unknown) => {
     store.setLogger(withOptionalSessionNotify(factoryLog, ctx));

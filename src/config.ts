@@ -225,7 +225,7 @@ export function createConfigStore(configPath: string, log: Logger): ConfigStore 
   };
 }
 
-function loadConfig(configPath: string, log: Logger): FilterConfig {
+export function loadConfig(configPath: string, log: Logger): FilterConfig {
   try {
     const raw = readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw);
