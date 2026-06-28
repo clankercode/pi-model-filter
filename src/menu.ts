@@ -442,8 +442,13 @@ export function buildModelFilterMenu(opts: MenuOptions) {
     }
 
     function renderSubmenu(width: number): string[] {
-      // Submenu is rendered by SelectList overlay — this renders the background
-      return renderEdit(width);
+      const lines = renderEdit(width);
+      if (submenuSelectList) {
+        lines.push("");
+        lines.push(theme.bold(theme.fg("accent", state.submenu === "provider" ? "Select provider:" : state.submenu === "ids" ? "Toggle IDs (Enter to toggle, Esc to done):" : "Select reasoning:" )));
+        lines.push(...submenuSelectList.render(width));
+      }
+      return lines;
     }
 
     function renderError(width: number): string[] {
@@ -528,6 +533,48 @@ export function buildModelFilterMenu(opts: MenuOptions) {
     // ---- submenu logic -------------------------------------------------
 
     let submenuSelectList: any = null;
+    let idsSelectedIds: Set<string> = new Set();
+    let idsModels: string[] = [];
+
+    function buildIdsSelectList() {
+      const items = idsModels.map((id) => ({
+        value: id,
+        label: `${idsSelectedIds.has(id) ? "✓" : " "} ${id}`,
+      }));
+      submenuSelectList = new SelectList(
+        items,
+        Math.min(items.length, 12),
+        getSubmenuTheme(),
+      );
+      submenuSelectList.onSelect = (item: any) => {
+        // Toggle selection
+        if (idsSelectedIds.has(item.value)) {
+          idsSelectedIds.delete(item.value);
+        } else {
+          idsSelectedIds.add(item.value);
+        }
+        // Rebuild the list (SelectList has no setItems)
+        buildIdsSelectList();
+        refresh();
+      };
+      submenuSelectList.onCancel = () => {
+        applyIdsSelection();
+      };
+    }
+
+    function applyIdsSelection() {
+      const ids = [...idsSelectedIds];
+      if (editingRule) {
+        if (ids.length > 0) {
+          editingRule.match.ids = ids;
+        } else {
+          delete editingRule.match.ids;
+        }
+      }
+      state.submenu = null;
+      submenuSelectList = null;
+      refresh();
+    }
 
     function openSubmenu(type: SubmenuType) {
       state.submenu = type;
@@ -556,52 +603,12 @@ export function buildModelFilterMenu(opts: MenuOptions) {
         };
       } else if (type === "ids") {
         const provider = editingRule?.provider ?? "*";
-        const models =
+        idsModels =
           provider === "*"
             ? opts.getModelsForProvider("*")
             : opts.getModelsForProvider(provider);
-        const selectedIds = new Set(editingRule?.match.ids ?? []);
-
-        // Build checklist items with current selection state
-        const items = models.map((id) => ({
-          value: id,
-          label: `${selectedIds.has(id) ? "✓" : " "} ${id}`,
-        }));
-
-        submenuSelectList = new SelectList(
-          items,
-          Math.min(items.length, 12),
-          getSubmenuTheme(),
-        );
-        submenuSelectList.onSelect = (item: any) => {
-          // Toggle selection
-          if (selectedIds.has(item.value)) {
-            selectedIds.delete(item.value);
-          } else {
-            selectedIds.add(item.value);
-          }
-          // Update labels
-          const newItems = models.map((id) => ({
-            value: id,
-            label: `${selectedIds.has(id) ? "✓" : " "} ${id}`,
-          }));
-          submenuSelectList.setItems(newItems);
-          submenuSelectList.invalidate();
-        };
-        submenuSelectList.onCancel = () => {
-          // Apply current selection
-          const ids = [...selectedIds];
-          if (editingRule) {
-            if (ids.length > 0) {
-              editingRule.match.ids = ids;
-            } else {
-              delete editingRule.match.ids;
-            }
-          }
-          state.submenu = null;
-          submenuSelectList = null;
-          refresh();
-        };
+        idsSelectedIds = new Set(editingRule?.match.ids ?? []);
+        buildIdsSelectList();
       } else if (type === "reasoning") {
         const items = [
           { value: "either", label: "either (any)" },
@@ -658,18 +665,8 @@ export function buildModelFilterMenu(opts: MenuOptions) {
       if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
         // Cancel submenu — for ids, this applies current selection
         if (state.submenu === "ids") {
-          // Apply current selection from labels
-          const items = submenuSelectList.getItems?.() ?? [];
-          const ids = items
-            .filter((i: any) => i.label.startsWith("✓"))
-            .map((i: any) => i.value);
-          if (editingRule) {
-            if (ids.length > 0) {
-              editingRule.match.ids = ids;
-            } else {
-              delete editingRule.match.ids;
-            }
-          }
+          applyIdsSelection();
+          return;
         }
         state.submenu = null;
         submenuSelectList = null;
