@@ -7,7 +7,7 @@ Hide unwanted GitHub Copilot models, enforce global allowlists, block by reasoni
 ## Install
 
 ```bash
-pi install @clanker-code/pi-model-filter
+pi install pi-model-filter
 ```
 
 ## Configuration

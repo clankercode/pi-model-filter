@@ -1,5 +1,5 @@
 {
-  "name": "@clanker-code/pi-model-filter",
+  "name": "pi-model-filter",
   "version": "0.1.0",
   "description": "Filter and block models from any provider via declarative allow/block rules. Hide unwanted Copilot models, enforce global allowlists, or block by context window size.",
   "author": "clankercode",

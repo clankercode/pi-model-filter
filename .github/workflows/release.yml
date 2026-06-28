@@ -50,7 +50,7 @@ jobs:
       # No NODE_AUTH_TOKEN: npm exchanges the GitHub OIDC token for a
       # short-lived publish token and attaches build provenance automatically
       # (public repo). Configure the trusted publisher once at
-      # https://www.npmjs.com/package/@clanker-code/pi-model-filter/access.
+      # https://www.npmjs.com/package/pi-model-filter/access.
       - name: Publish to npm
         run: npm publish
 
