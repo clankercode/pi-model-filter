@@ -30,7 +30,8 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.74.0"
+    "@earendil-works/pi-coding-agent": ">=0.74.0",
+    "@earendil-works/pi-ai": ">=0.74.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
