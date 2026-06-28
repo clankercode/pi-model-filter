@@ -3,6 +3,7 @@ import {
   createConfigStore,
   startConfigWatcher,
   loadConfig,
+  saveConfig,
   type ConfigStore,
   type Logger,
 } from "./config.js";
@@ -78,6 +79,30 @@ export default function piModelFilter(pi: any) {
   pi.registerCommand("model-filter", {
     description: "Open the model filter menu",
     handler: async (_args: string, ctx: any) => {
+      // Derive provider and model lists from the registry
+      const getProviders = (): string[] => {
+        try {
+          const models = ctx.modelRegistry?.getAvailable?.() ?? [];
+          return [...new Set(models.map((m: any) => m.provider as string))] as string[];
+        } catch {
+          return [];
+        }
+      };
+
+      const getModelsForProvider = (provider: string): string[] => {
+        try {
+          const models = ctx.modelRegistry?.getAvailable?.() ?? [];
+          if (provider === "*") {
+            return [...new Set(models.map((m: any) => m.id as string))] as string[];
+          }
+          return models
+            .filter((m: any) => m.provider === provider)
+            .map((m: any) => m.id as string);
+        } catch {
+          return [];
+        }
+      };
+
       await ctx.ui.custom(
         buildModelFilterMenu({
           store,
@@ -86,6 +111,9 @@ export default function piModelFilter(pi: any) {
             const newConfig = loadConfig(configPath, factoryLog);
             store.replace(newConfig);
           },
+          getProviders,
+          getModelsForProvider,
+          logger: factoryLog,
         }),
       );
     },

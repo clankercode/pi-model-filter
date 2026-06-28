@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildModelFilterMenu } from "../menu";
-import type { ConfigStore, FilterConfig } from "../config";
+import type { ConfigStore, FilterConfig, Logger } from "../config";
 
 function makeStore(config: FilterConfig): ConfigStore {
   let current = config;
@@ -13,8 +13,10 @@ function makeStore(config: FilterConfig): ConfigStore {
   };
 }
 
-// Simulate the pi-tui Key constants for test input
-// These are the ANSI escape sequences that matchesKey checks for
+function makeLogger(): Logger {
+  return { warn: vi.fn() };
+}
+
 const KEYS = {
   up: "\x1b[A",
   down: "\x1b[B",
@@ -29,6 +31,8 @@ function mount(opts: {
   config: FilterConfig;
   configPath?: string;
   reloadConfig?: () => void;
+  getProviders?: () => string[];
+  getModelsForProvider?: (p: string) => string[];
 }) {
   const store = makeStore(opts.config);
   const reloadConfig = opts.reloadConfig ?? vi.fn();
@@ -36,14 +40,31 @@ function mount(opts: {
     store,
     configPath: opts.configPath ?? "~/.pi/agent/model-filter.json",
     reloadConfig,
+    getProviders: opts.getProviders ?? (() => ["github-copilot", "openai", "anthropic"]),
+    getModelsForProvider:
+      opts.getModelsForProvider ??
+      ((p: string) => {
+        const all: Record<string, string[]> = {
+          "github-copilot": ["gpt-5.4", "claude-opus-4.6"],
+          openai: ["gpt-5.4", "gpt-5.5"],
+          anthropic: ["claude-sonnet-4"],
+        };
+        if (p === "*")
+          return ["gpt-5.4", "gpt-5.5", "claude-opus-4.6", "claude-sonnet-4"];
+        return all[p] ?? [];
+      }),
+    logger: makeLogger(),
   });
 
-  // Mock tui, theme, keybindings
   const theme = {
     bold: (s: string) => s,
     fg: (_color: string, s: string) => s,
   };
-  const tui = { requestRender: vi.fn() };
+  const tui = {
+    requestRender: vi.fn(),
+    stop: vi.fn(),
+    start: vi.fn(),
+  };
   let doneResult: any = null;
   const done = (result: any) => {
     doneResult = result;
@@ -58,6 +79,7 @@ function mount(opts: {
     render: (width = 80) => component.render(width),
     input: (key: string) => component.handleInput(key),
     state: () => component._state(),
+    editingRule: () => component._editingRule(),
     error: () => component.getError(),
     doneResult: () => doneResult,
     isDone: () => doneResult !== null,
@@ -101,7 +123,7 @@ describe("model-filter menu", () => {
     });
 
     it("renders empty rules correctly", () => {
-      const m = mount({ config: { rules: [], defaultAction: "allow" } });
+      const m = mount({ config: { rules: [], defaultAction: "block" } });
       const lines = m.render();
       expect(lines.some((l) => l.includes("0 rules"))).toBe(true);
     });
@@ -113,16 +135,13 @@ describe("model-filter menu", () => {
       m.input(KEYS.down);
       expect(m.state().homeIndex).toBe(1);
 
-      m.input(KEYS.down);
-      expect(m.state().homeIndex).toBe(2);
-
       // Wraps around
       m.input(KEYS.down);
       expect(m.state().homeIndex).toBe(0);
 
       // Wraps around backwards
       m.input(KEYS.up);
-      expect(m.state().homeIndex).toBe(2);
+      expect(m.state().homeIndex).toBe(1);
     });
 
     it("enters rules view on right/enter", () => {
@@ -145,23 +164,10 @@ describe("model-filter menu", () => {
       m.input(KEYS.left);
       expect(m.isDone()).toBe(true);
     });
-
-    it("shows reload message on reload action", () => {
-      const reloadConfig = vi.fn();
-      const m = mount({ config: sampleConfig, reloadConfig });
-
-      // Navigate to "Reload config" (index 2)
-      m.input(KEYS.down);
-      m.input(KEYS.down);
-      m.input(KEYS.enter);
-
-      expect(reloadConfig).toHaveBeenCalled();
-      expect(m.error()).toBe("Config reloaded");
-    });
   });
 
   describe("rules view", () => {
-    it("shows rules list", () => {
+    it("shows rules list with [+] add", () => {
       const m = mount({ config: sampleConfig });
       m.input(KEYS.right); // enter rules
 
@@ -169,9 +175,10 @@ describe("model-filter menu", () => {
       expect(lines.some((l) => l.includes("allow"))).toBe(true);
       expect(lines.some((l) => l.includes("block"))).toBe(true);
       expect(lines.some((l) => l.includes("‹ back"))).toBe(true);
+      expect(lines.some((l) => l.includes("+ Add rule"))).toBe(true);
     });
 
-    it("navigates rules with up/down", () => {
+    it("navigates rules with up/down including [+] add", () => {
       const m = mount({ config: sampleConfig });
       m.input(KEYS.right); // enter rules
 
@@ -181,15 +188,31 @@ describe("model-filter menu", () => {
       m.input(KEYS.down);
       expect(m.state().ruleIndex).toBe(2);
       m.input(KEYS.down);
+      expect(m.state().ruleIndex).toBe(3); // [+] Add rule
+      m.input(KEYS.down);
       expect(m.state().ruleIndex).toBe(0); // wraps
     });
 
-    it("enters detail on right/enter", () => {
+    it("enters detail on right/enter for existing rule", () => {
       const m = mount({ config: sampleConfig });
       m.input(KEYS.right); // enter rules
       m.input(KEYS.right); // enter detail
 
       expect(m.state().mode).toBe("detail");
+    });
+
+    it("enters edit on [+] add rule", () => {
+      const m = mount({ config: sampleConfig });
+      m.input(KEYS.right); // enter rules
+
+      // Navigate to [+] Add rule (index 3)
+      m.input(KEYS.down);
+      m.input(KEYS.down);
+      m.input(KEYS.down);
+      m.input(KEYS.enter);
+
+      expect(m.state().mode).toBe("edit");
+      expect(m.state().editingNew).toBe(true);
     });
 
     it("goes back to home on left/escape", () => {
@@ -221,37 +244,14 @@ describe("model-filter menu", () => {
       expect(lines.some((l) => l.includes("allow"))).toBe(true);
     });
 
-    it("shows context window details", () => {
-      const config: FilterConfig = {
-        rules: [
-          {
-            provider: "*",
-            action: "block",
-            match: { contextWindow: { min: 100000, max: 300000 } },
-          },
-        ],
-        defaultAction: "allow",
-      };
-      const m = mount({ config });
+    it("shows action items (Edit/Delete)", () => {
+      const m = mount({ config: sampleConfig });
       m.input(KEYS.right); // enter rules
       m.input(KEYS.right); // enter detail
 
       const lines = m.render();
-      expect(lines.some((l) => l.includes("100000"))).toBe(true);
-      expect(lines.some((l) => l.includes("300000"))).toBe(true);
-    });
-
-    it("navigates between rules with up/down", () => {
-      const m = mount({ config: sampleConfig });
-      m.input(KEYS.right); // enter rules
-      m.input(KEYS.right); // enter detail (rule 0)
-
-      expect(m.state().ruleIndex).toBe(0);
-      m.input(KEYS.down);
-      expect(m.state().ruleIndex).toBe(1);
-
-      const lines = m.render();
-      expect(lines.some((l) => l.includes("Rule 2 of 3"))).toBe(true);
+      expect(lines.some((l) => l.includes("Edit rule"))).toBe(true);
+      expect(lines.some((l) => l.includes("Delete rule"))).toBe(true);
     });
 
     it("goes back to rules on left/escape", () => {
@@ -261,6 +261,99 @@ describe("model-filter menu", () => {
       m.input(KEYS.left); // back to rules
 
       expect(m.state().mode).toBe("rules");
+    });
+  });
+
+  describe("edit view", () => {
+    it("enters edit from detail", () => {
+      const m = mount({ config: sampleConfig });
+      m.input(KEYS.right); // enter rules
+      m.input(KEYS.right); // enter detail
+      m.input(KEYS.enter); // select "Edit rule"
+
+      expect(m.state().mode).toBe("edit");
+      expect(m.state().editingNew).toBe(false);
+    });
+
+    it("shows edit fields", () => {
+      const m = mount({ config: sampleConfig });
+      m.input(KEYS.right); // enter rules
+      m.input(KEYS.right); // enter detail
+      m.input(KEYS.enter); // edit
+
+      const lines = m.render();
+      expect(lines.some((l) => l.includes("Provider:"))).toBe(true);
+      expect(lines.some((l) => l.includes("Action:"))).toBe(true);
+      expect(lines.some((l) => l.includes("Match IDs:"))).toBe(true);
+      expect(lines.some((l) => l.includes("Patterns:"))).toBe(true);
+      expect(lines.some((l) => l.includes("Reasoning:"))).toBe(true);
+    });
+
+    it("toggles action on space", () => {
+      const m = mount({ config: sampleConfig });
+      m.input(KEYS.right); // enter rules
+      m.input(KEYS.right); // enter detail
+      m.input(KEYS.enter); // edit
+
+      // Navigate to action field (index 1)
+      m.input(KEYS.down);
+      expect(m.state().editFieldIndex).toBe(1);
+
+      // Space toggles
+      m.input(KEYS.space);
+      const rule = m.editingRule();
+      expect(rule?.action).toBe("block"); // was "allow"
+    });
+
+    it("navigates edit fields with up/down", () => {
+      const m = mount({ config: sampleConfig });
+      m.input(KEYS.right); // enter rules
+      m.input(KEYS.right); // enter detail
+      m.input(KEYS.enter); // edit
+
+      expect(m.state().editFieldIndex).toBe(0);
+      m.input(KEYS.down);
+      expect(m.state().editFieldIndex).toBe(1);
+      m.input(KEYS.down);
+      expect(m.state().editFieldIndex).toBe(2);
+      m.input(KEYS.down);
+      expect(m.state().editFieldIndex).toBe(3);
+      m.input(KEYS.down);
+      expect(m.state().editFieldIndex).toBe(4);
+      m.input(KEYS.down);
+      expect(m.state().editFieldIndex).toBe(5); // Delete
+      m.input(KEYS.down);
+      expect(m.state().editFieldIndex).toBe(0); // wraps
+    });
+
+    it("opens [+] add rule as new blank rule", () => {
+      const m = mount({ config: sampleConfig });
+      m.input(KEYS.right); // enter rules
+
+      // Navigate to [+] Add rule
+      m.input(KEYS.down);
+      m.input(KEYS.down);
+      m.input(KEYS.down);
+      m.input(KEYS.enter);
+
+      expect(m.state().mode).toBe("edit");
+      expect(m.state().editingNew).toBe(true);
+
+      const rule = m.editingRule();
+      expect(rule?.provider).toBe("*");
+      expect(rule?.action).toBe("block");
+      expect(rule?.match).toEqual({});
+    });
+
+    it("delete rule from detail view", () => {
+      const m = mount({ config: sampleConfig });
+      m.input(KEYS.right); // enter rules
+      m.input(KEYS.right); // enter detail
+      m.input(KEYS.down); // select Delete
+      m.input(KEYS.enter); // delete
+
+      expect(m.state().mode).toBe("rules");
+      expect(m.store.current().rules).toHaveLength(2);
     });
   });
 

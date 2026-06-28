@@ -1,4 +1,4 @@
-import { readFileSync, watch, type FSWatcher } from "node:fs";
+import { readFileSync, writeFileSync, watch, type FSWatcher } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +30,10 @@ export interface ConfigStore {
   current(): FilterConfig;
   replace(config: FilterConfig): void;
   setLogger(logger: Logger): void;
+}
+
+export function saveConfig(configPath: string, config: FilterConfig): void {
+  writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
 
 // ---------------------------------------------------------------------------
