@@ -22,5 +22,5 @@ release version:
     git add package.json package-lock.json 2>/dev/null || git add package.json
     git commit -m "release: v{{version}}"
     git tag "v{{version}}"
-    git push origin main --tags
+    git push origin master --tags
     echo "Pushed v{{version}} — CI will publish to npm"
