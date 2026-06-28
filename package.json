@@ -1,6 +1,6 @@
 {
   "name": "pi-model-filter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Filter and block models from any provider via declarative allow/block rules. Hide unwanted Copilot models, enforce global allowlists, or block by context window size.",
   "author": "clankercode",
   "license": "Unlicense",
@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/clankercode/pi-model-filter.git"
   },
-  "homepage": "https://github.com/clankercode/pi-model-filter#readme",
+  "homepage": "https://www.npmjs.com/package/pi-model-filter",
   "bugs": {
     "url": "https://github.com/clankercode/pi-model-filter/issues"
   },

@@ -111,6 +111,3 @@ The extension patches `ModelRegistry.prototype` at load time (before startup mod
 - **pi internals change**: extension detects missing methods and disables itself with a warning.
 - **Hot reload**: editing `model-filter.json` takes effect without restarting pi.
 
-## Status
-
-Early release — see [PLAN.md](PLAN.md) for full design details.
