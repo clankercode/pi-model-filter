@@ -1,0 +1,60 @@
+name: Release
+
+# Publishes to npm and cuts a GitHub Release when a version tag is pushed.
+# Cut a release by bumping the version in package.json, committing, and
+# pushing a vX.Y.Z tag, or run `just release X.Y.Z`.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # OIDC: npm trusted publishing (no NPM_TOKEN secret)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - run: npm ci
+
+      # Re-run the full gate: never publish a tag that doesn't pass.
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # Guard: the tag must match the version in package.json.
+      - name: Verify tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+          echo "Releasing $pkg"
+
+      # Trusted publishing requires npm >= 11.5.1; Node 22 ships npm 10.
+      - name: Upgrade npm (for OIDC trusted publishing)
+        run: npm install -g npm@latest
+
+      # No NODE_AUTH_TOKEN: npm exchanges the GitHub OIDC token for a
+      # short-lived publish token and attaches build provenance automatically
+      # (public repo). Configure the trusted publisher once at
+      # https://www.npmjs.com/package/@clanker-code/pi-model-filter/access.
+      - name: Publish to npm
+        run: npm publish
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
