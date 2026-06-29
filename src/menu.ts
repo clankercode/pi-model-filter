@@ -541,6 +541,8 @@ export function buildModelFilterMenu(opts: MenuOptions) {
     let idsSelectedIds: Set<string> = new Set();
     let idsModels: string[] = [];
 
+    let idsSelectedIndex = 0;
+
     function buildIdsSelectList() {
       const items = idsModels.map((id) => ({
         value: id,
@@ -551,6 +553,8 @@ export function buildModelFilterMenu(opts: MenuOptions) {
         Math.min(items.length, 12),
         getSubmenuTheme(),
       );
+      // Restore position after rebuild
+      submenuSelectList.setSelectedIndex(idsSelectedIndex);
       submenuSelectList.onSelect = (item: any) => {
         // Toggle selection
         if (idsSelectedIds.has(item.value)) {
@@ -613,6 +617,7 @@ export function buildModelFilterMenu(opts: MenuOptions) {
             ? opts.getModelsForProvider("*")
             : opts.getModelsForProvider(provider);
         idsSelectedIds = new Set(editingRule?.match.ids ?? []);
+        idsSelectedIndex = 0;
         buildIdsSelectList();
       } else if (type === "reasoning") {
         const items = [
@@ -688,6 +693,11 @@ export function buildModelFilterMenu(opts: MenuOptions) {
       }
       // Pass to SelectList for up/down navigation
       submenuSelectList.handleInput(data);
+      // Track index for IDs submenu so rebuilds preserve position
+      if (state.submenu === "ids") {
+        const sel = submenuSelectList.getSelectedItem?.();
+        if (sel) idsSelectedIndex = idsModels.indexOf(sel.value);
+      }
       refresh();
     }
 
